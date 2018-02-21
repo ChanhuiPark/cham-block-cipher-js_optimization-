@@ -1,2 +1,2 @@
-# cham-block-cipher-js_optimazation-
+# cham-block-cipher-js_optimization-
 reducing number of rounds
