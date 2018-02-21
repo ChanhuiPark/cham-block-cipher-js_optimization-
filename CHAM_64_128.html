@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>cham 64/128</title>
+</head>
+<body>
+<script type="text/javascript">
+
+function ROL(k, x){
+	return ((k << x) | (k >> 16-x)) % 0x10000;
+}
+
+
+function ROL1(k){
+	return ((k << 1) | (k >> 15)) % 0x10000;
+}
+
+function ROL8(k){
+	return ((k << 8) | (k >> 8)) % 0x10000;
+}
+
+function ROR(k, x){
+	return ((k >> x) | ((k << 16-x))) % 0x10000;
+}
+
+function KeyExpansion(k, rk){
+	for(var i=0; i<8; i++){
+		rk[i] = k[i] ^ ROL(k[i], 1) ^ ROL(k[i], 8);
+		rk[(i+8) ^ 0x0001] = k[i] ^ ROL(k[i], 1) ^ ROL(k[i], 11);
+	}
+}
+
+function Encryption(pt, rk, ct){
+	var tmp;
+
+	for(var i=0; i<20; i++){
+		//pt[0]
+		tmp = ROL(pt[1], 1) ^ rk[(4*i) % 16];
+		ct[0] = ((pt[0] ^ (4*i)) + tmp) % 0x10000;
+		ct[0] = ROL(ct[0], 8);
+
+
+		//pt[1]
+		tmp = ROL(pt[2], 8) ^ rk[(4*i+1) % 16];
+		ct[1] = ((pt[1] ^ (4*i+1)) + tmp) % 0x10000;
+		ct[1] = ROL(ct[1], 1);
+
+		//pt[2]
+		tmp = ROL(pt[3], 1) ^ rk[(4*i+2) % 16];
+		ct[2] = ((pt[2] ^ (4*i+2)) + tmp) % 0x10000;
+		ct[2] = ROL(ct[2], 8);
+
+		//pt[3]
+		tmp = ROL(ct[0], 8) ^ rk[(4*i+3) % 16];
+		ct[3] = ((pt[3] ^ (4*i+3)) + tmp) % 0x10000;
+		ct[3] = ROL(ct[3], 1);
+
+
+		pt[0] = ct[0];
+		pt[1] = ct[1];
+		pt[2] = ct[2];
+		pt[3] = ct[3];
+		//console.log("Round " + i + " : " + pt[0].toString(16) + ", " + pt[1].toString(16) + ", " + pt[2].toString(16) + ", " + pt[3].toString(16));
+	}
+}
+
+function Decryption(ct, rk, pt){
+	var tmp;
+
+	for(var i=19; i>=0; i--){
+		//ct[3]
+		tmp = ROL(ct[0], 8) ^ rk[(4 * i + 3) % 16];
+		pt[3] = ((ROR(ct[3], 1) - tmp)>>>0) % 0x10000;
+		pt[3] = pt[3] ^ ( 4 * i + 3);
+
+		//ct[2]
+		tmp = ROL(pt[3], 1) ^ rk[(4 * i + 2) % 16];
+		pt[2] = ((ROR(ct[2], 8) - tmp)>>>0) % 0x10000;
+		pt[2] = pt[2] ^ (4 * i + 2);
+
+		//ct[1]
+		tmp = ROL(pt[2], 8) ^ rk[(4 * i + 1) % 16];
+		pt[1] = ((ROR(ct[1], 1) - tmp)>>>0) % 0x10000;
+		pt[1] = pt[1] ^ (4 * i + 1);
+
+		//ct[0]
+		tmp = ROL(pt[1], 1) ^ rk[(4 * i) % 16];
+		pt[0] = ((ROR(ct[0], 8) - tmp)>>>0) % 0x10000;
+		pt[0] = pt[0] ^ ( 4 * i);
+
+		ct[0] = pt[0];
+		ct[1] = pt[1];
+		ct[2] = pt[2];
+		ct[3] = pt[3];
+		//console.log("Round " + i + " : " + ct[0].toString(16) + ", " + ct[1].toString(16) + ", " + ct[2].toString(16) + ", " + ct[3].toString(16));
+	}
+}
+
+function cham64_128(){
+	var key = [0x0100, 0x0302, 0x0504, 0x0706, 0x0908, 0x0b0a, 0x0d0c, 0x0f0e];
+	var pt = [0x1100, 0x3322, 0x5544, 0x7766];
+	var pt2 = new Array(4);
+	var ct = [0x453c, 0x63bc, 0xdcfa, 0xbf4e];
+	var ct2 = new Array(4);
+	var rk = new Array(16);
+
+	KeyExpansion(key, rk);
+
+	Encryption(pt, rk, ct2);
+	console.log("암호화 결과");
+	for(var i=0; i<4; i++) console.log(ct2[i].toString(16));
+
+	Decryption(ct2, rk, pt2);
+	console.log("복호화 결과");
+	for(var i=0; i<4; i++) console.log(pt2[i].toString(16));
+
+
+	//Time Calc
+	var Hz2 = 3.40*1073741824
+	var Bytes = 8;
+
+	var size_test = 100000;
+	var cnt_time;
+	var StartTime = new Date().getTime();
+	for(cnt_time=0; cnt_time<size_test; cnt_time++){
+		KeyExpansion(key, rk);
+	}
+	var EndTime = new Date().getTime();
+
+	var ms = (EndTime-StartTime)/size_test;
+	var s = ms * 0.001;
+	console.log("Key Expansion time : " + ms + "ms");
+	console.log("Key Expansion time : " + s + "s");
+	console.log("cpb : " + (Hz2*s) / Bytes);
+
+
+	StartTime = new Date().getTime();
+
+	for(cnt_time=0; cnt_time<size_test; cnt_time++){
+		Encryption(pt, rk, ct2);
+	}
+	EndTime = new Date().getTime();
+	ms = (EndTime-StartTime)/size_test;
+	s = ms * 0.001;
+	console.log("Encryption time : " + ms + "ms");
+	console.log("Encryption time : " + s + "s");
+	console.log("cpb : " + (Hz2*s) / Bytes);
+
+
+	StartTime = new Date().getTime();
+	for(cnt_time=0; cnt_time<size_test; cnt_time++){
+		Decryption(pt2, rk, ct2);
+	}
+	EndTime = new Date().getTime();
+	ms = (EndTime-StartTime) / size_test;
+	s = ms * 0.001;
+	console.log("Decryption time : " + ms + "ms");
+	console.log("Decryption time : " + s + "s");
+	console.log("cpb : " + (Hz2*s) / Bytes);
+}
+
+</script>
+<form><input type="button" value = "Click" onclick="cham64_128();"></form>
+</body>
+</html>
