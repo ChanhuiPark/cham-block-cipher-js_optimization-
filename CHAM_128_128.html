@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title></title>
+</head>
+<body>
+<script type="text/javascript">
+
+function ROL(k, x){
+	return ((k << x)>>>0 | (k >>> (32-x)))>>>0 % 0x100000000;
+}
+
+function ROR(k, x){
+	return ((k >>> x) | (k << (32-x)))>>>0 % 0x100000000;
+}
+
+function KeyExpansion(k, rk){
+	for(var i=0; i<4; i++){
+		rk[i] = k[i] ^ ROL(k[i], 1) ^ ROL(k[i], 8);
+		rk[(i + 4) ^ 0x00000001] = k[i] ^ ROL(k[i], 1) ^ ROL(k[i], 11);
+	}
+}
+
+function Encryption(pt, rk, ct){
+	var tmp;
+
+	for(var i=0; i<20; i++){
+		//pt[0]
+		tmp = ROL(pt[1], 1) ^ rk[(4*i) % 8];
+		ct[0] = ((pt[0] ^ (4*i)) + tmp) % 0x100000000;
+		ct[0] = ROL(ct[0], 8);
+
+		//pt[1]
+		tmp = ROL(pt[2], 8) ^ rk[(4*i+1) % 8];
+		ct[1] = ((pt[1] ^ (4*i+1)) + tmp) % 0x100000000;
+		ct[1] = ROL(ct[1], 1);
+
+		//pt[2]
+		tmp = ROL(pt[3], 1) ^ rk[(4*i+2) % 8];
+		ct[2] = ((pt[2] ^ (4*i+2)) + tmp) % 0x100000000;
+		ct[2] = ROL(ct[2], 8);
+
+		//pt[3]
+		tmp = ROL(ct[0], 8) ^ rk[(4*i+3) % 8];
+		ct[3] = ((pt[3] ^ (4*i+3)) + tmp) % 0x100000000;
+		ct[3] = ROL(ct[3], 1);
+
+		pt[0] = ct[0];
+		pt[1] = ct[1];
+		pt[2] = ct[2];
+		pt[3] = ct[3];
+
+		//console.log("Round " + i + " : " + ct[0].toString(16) + ", " + ct[1].toString(16) + ", " + ct[2].toString(16) + ", " + ct[3].toString(16));
+	}
+}
+
+function Decryption(ct, rk, pt){
+	var tmp;
+
+	for(var i=19; i>=0; i--){
+		//ct[3]
+		tmp = ROL(ct[0], 8) ^ rk[(4 * i + 3) % 8];
+		pt[3] = ((ROR(ct[3], 1) - tmp)>>>0) % 0x100000000;
+		pt[3] = (pt[3] ^ ( 4 * i + 3))>>>0;
+
+		//ct[2]
+		tmp = ROL(pt[3], 1) ^ rk[(4 * i + 2) % 8];
+		pt[2] = ((ROR(ct[2], 8) - tmp)>>>0) % 0x100000000;
+		pt[2] = (pt[2] ^ (4 * i + 2))>>>0;
+
+		//ct[1]
+		tmp = ROL(pt[2], 8) ^ rk[(4 * i + 1) % 8];
+		pt[1] = ((ROR(ct[1], 1) - tmp)>>>0) % 0x100000000;
+		pt[1] = (pt[1] ^ (4 * i + 1))>>>0;
+
+		//ct[0]
+		tmp = ROL(pt[1], 1) ^ rk[(4 * i) % 8];
+		pt[0] = ((ROR(ct[0], 8) - tmp)>>>0) % 0x100000000;
+		pt[0] = (pt[0] ^ ( 4 * i))>>>0;
+
+		ct[0] = pt[0];
+		ct[1] = pt[1];
+		ct[2] = pt[2];
+		ct[3] = pt[3];
+		//console.log("Round " + i + " : " + ct[0].toString(16) + ", " + ct[1].toString(16) + ", " + ct[2].toString(16) + ", " + ct[3].toString(16));
+	}
+}
+
+function cham128_128(){
+	var key = [0x03020100, 0x07060504, 0x0b0a0908, 0x0f0e0d0c];
+	var pt = [0x33221100, 0x77665544, 0xbbaa9988, 0xffeeddcc];
+	var pt2 = new Array(4);
+	var ct = [0xc3746034, 0xb55700c5, 0x8d64ec32, 0x489332f7];
+	var ct2 = new Array(4);
+	var rk = new Array(8);
+
+	KeyExpansion(key, rk);
+
+	Encryption(pt, rk, ct2);
+	console.log("Encryption Result : "+ ct2[0].toString(16) + ", " + ct2[1].toString(16) + ", " + ct2[2].toString(16) + ", " + ct2[3].toString(16));
+	Decryption(ct2, rk, pt2);
+	console.log("Decryption Result : " + pt2[0].toString(16) + ", " + pt2[1].toString(16) + ", " + pt2[2].toString(16) + ", " + pt2[3].toString(16));
+
+
+	//Time Calc
+	var Hz2 = 3.40*1073741824
+	var Bytes = 8;
+
+	var size_test = 100000;
+	var cnt_time;
+	var StartTime = new Date().getTime();
+	for(cnt_time=0; cnt_time<size_test; cnt_time++){
+		KeyExpansion(key, rk);
+	}
+	var EndTime = new Date().getTime();
+	var ms = (EndTime - StartTime)/size_test;
+	var s = ms * 0.001;
+	console.log("Key Expansion time : " + ms + "ms");
+	console.log("Key Expansion time : " + s + "s");
+	console.log("cpb : " + (Hz2*s) / Bytes);
+
+
+	StartTime = new Date().getTime();
+	for(cnt_time=0; cnt_time<size_test; cnt_time++){
+		Encryption(pt, rk, ct2);
+	}
+	EndTime = new Date().getTime();
+	ms = (EndTime - StartTime)/size_test;
+	s = ms * 0.001;
+	console.log("Encryption time : " + ms + "ms");
+	console.log("Encryption time : " + s + "s");
+	console.log("cpb : " + (Hz2*s) / Bytes);
+
+
+	StartTime = new Date().getTime();
+	for(cnt_time=0; cnt_time<size_test; cnt_time++){
+		Decryption(pt2, rk, ct2);
+	}
+	EndTime = new Date().getTime();
+	ms = (EndTime - StartTime)/size_test;
+	s = ms * 0.001;
+	console.log("Encryption time : " + ms + "ms");
+	console.log("Encryption time : " + s + "s");
+	console.log("cpb : " + (Hz2*s) / Bytes);
+}
+</script>
+<form><input type="button" value = "Click" onclick="cham128_128();"></form>
+</body>
+</html>
